@@ -1,0 +1,15 @@
+((() => {var sentinel = {}; var output = function() {
+    let dart = dartDevEmbedder.importLibrary("dart:_runtime", function(lib) {
+      dart = lib;
+    });
+    let dart_rti = dartDevEmbedder.importLibrary("dart:_rti", function(lib) {
+      dart_rti = lib;
+    });
+    let dartx = dartDevEmbedder.importLibrary("dartx", function(lib) {
+      dartx = lib;
+    });
+    var T = {
+      VoidTobool: () => (T.VoidTobool = dart.constFn(dart_rti._Universe.eval(dart.typeUniverse, "core|bool()", true)))()
+    };
+    return dart.fn(() => true, T.VoidTobool());
+  }(); if (output === sentinel) throw Error("Value not found in scope");return output?._boundMethod || output;})())
