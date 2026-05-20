@@ -47,7 +47,8 @@ async function addOrUpdateData() {
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash('password123', salt);
             staff = new User({
-                name: 'John Doe',
+                firstName: 'John',
+                lastName: 'Doe',
                 email: 'john@staff.com',
                 password: hashedPassword,
                 role: 'staff',

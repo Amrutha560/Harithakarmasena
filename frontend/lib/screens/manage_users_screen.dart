@@ -28,6 +28,30 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     });
   }
 
+  Future<void> _deleteUser(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete User?'),
+        content: const Text('Are you sure you want to remove this user? This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isLoading = true);
+      await _apiService.deleteUser(id);
+      _fetchUsers();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -159,6 +183,11 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(width: 16),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+            onPressed: () => _deleteUser(user['_id']),
           ),
         ],
       ),

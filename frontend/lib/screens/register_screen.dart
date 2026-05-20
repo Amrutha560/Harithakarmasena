@@ -1,4 +1,7 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -9,19 +12,29 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final _nameController = TextEditingController();
-  final _usernameController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _houseNumberController = TextEditingController();
   final _addressController = TextEditingController();
+  final _lsgiNameController = TextEditingController();
   final _wardController = TextEditingController();
-  final _passwordController = TextEditingController();
+
   final ApiService apiService = ApiService();
   bool _isLoading = false;
   List<dynamic> _wards = [];
   List<dynamic> _routes = [];
+
   String? _selectedWardId;
   String? _selectedRouteId;
+  String? _selectedDistrict = 'Kottayam';
+  String? _selectedLsgiType = 'Gramapanchayath';
+  Uint8List? _verificationDocBytes;
+  String? _verificationDocName;
+
+  final List<String> _districts = ['Kottayam'];
+
+  final List<String> _lsgiTypes = ['Gramapanchayath'];
 
   @override
   void initState() {
@@ -30,49 +43,149 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _fetchWards() async {
-    final wards = await apiService.getWards();
-    setState(() => _wards = wards);
+    try {
+      final wards = await apiService.getWards();
+      if (mounted) setState(() => _wards = wards);
+    } catch (e) {
+      debugPrint("Error fetching wards: $e");
+    }
   }
 
   Future<void> _fetchRoutes(String wardId) async {
-    final routes = await apiService.getRoutes(wardId: wardId);
+    try {
+      final routes = await apiService.getRoutes(wardId: wardId);
+      if (mounted) {
+        setState(() {
+          _routes = routes;
+          _selectedRouteId = null; // Reset route when ward changes
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching routes: $e");
+    }
+  }
+
+  Future<void> _pickVerificationPdf() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+      withData: true,
+    );
+
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.single;
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      _showMsg('Please upload a PDF file only', Colors.orange);
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      _showMsg('PDF must be 5 MB or smaller', Colors.orange);
+      return;
+    }
+    if (file.bytes == null) {
+      _showMsg(
+        'Could not read selected PDF. Please try again.',
+        Colors.redAccent,
+      );
+      return;
+    }
+
     setState(() {
-      _routes = routes;
-      _selectedRouteId = null;
+      _verificationDocBytes = file.bytes;
+      _verificationDocName = file.name;
     });
   }
 
+  int _wordCount(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return 0;
+    return text.split(RegExp(r'\s+')).length;
+  }
+
   void _register() async {
-    if (_nameController.text.isEmpty ||
-        _usernameController.text.isEmpty ||
-        _phoneController.text.isEmpty ||
-        _passwordController.text.isEmpty ||
+    if (_firstNameController.text.trim().isEmpty ||
+        _lastNameController.text.trim().isEmpty ||
+        _phoneController.text.trim().isEmpty ||
+        _houseNumberController.text.trim().isEmpty ||
+        _selectedDistrict == null ||
+        _selectedLsgiType == null ||
+        _lsgiNameController.text.trim().isEmpty ||
         _selectedWardId == null ||
-        _selectedRouteId == null) {
+        _addressController.text.trim().isEmpty ||
+        _verificationDocBytes == null) {
       _showMsg('Please fill all mandatory fields', Colors.orange);
+      return;
+    }
+
+    if (_wordCount(_firstNameController.text) > 10) {
+      _showMsg('First name must be maximum 10 words', Colors.orange);
+      return;
+    }
+
+    if (_wordCount(_lastNameController.text) > 10) {
+      _showMsg('Last name must be maximum 10 words', Colors.orange);
+      return;
+    }
+
+    if (_phoneController.text.length != 10) {
+      _showMsg('Please enter a valid 10-digit mobile number', Colors.orange);
+      return;
+    }
+
+    if (!RegExp(r'^\d{1,3}$').hasMatch(_houseNumberController.text.trim())) {
+      _showMsg(
+        'House number must be 1 to 3 digits, e.g. 1, 18 or 133',
+        Colors.orange,
+      );
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      String identifier = _usernameController.text.trim().toLowerCase();
-      final emailValue = identifier.contains('@') ? identifier : '$identifier@resident.com';
-      
-      final result = await apiService.residentRegister(
-        _nameController.text,
-        emailValue,
-        _passwordController.text,
-        houseNumber: _houseNumberController.text,
-        address: _addressController.text,
-        phone: _phoneController.text,
-        wardId: _selectedWardId,
-        routeId: _selectedRouteId,
-      ).timeout(const Duration(seconds: 10));
+      final String phoneValue = _phoneController.text.trim();
+      final String cleanHouseNumber = _houseNumberController.text.trim();
+      final String cleanWardId = (_selectedWardId ?? '')
+          .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
+          .toLowerCase();
+      final String emailValue =
+          'house_${cleanHouseNumber.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toLowerCase()}_$cleanWardId@resident.local';
+      final selectedWard = _wards.firstWhere(
+        (w) => w['_id']?.toString() == _selectedWardId,
+        orElse: () => null,
+      );
+      final selectedWardName = selectedWard == null
+          ? ''
+          : 'Ward ${selectedWard['wardNumber']}: ${selectedWard['name']}';
 
-      if (result['token'] != null || result['message'] == 'Resident registered successfully') {
+      final result = await apiService
+          .residentRegister(
+            firstName: _firstNameController.text.trim(),
+            lastName: _lastNameController.text.trim(),
+            email: emailValue,
+            address: _addressController.text,
+            phone: _phoneController.text,
+            houseNumber: cleanHouseNumber,
+            wardId: _selectedWardId,
+            routeId: null,
+            district: _selectedDistrict,
+            lsgiType: _selectedLsgiType,
+            lsgiName: _lsgiNameController.text.trim(),
+            wardName: selectedWardName,
+            verificationDocBytes: _verificationDocBytes,
+            verificationDocName: _verificationDocName,
+          )
+          .timeout(const Duration(seconds: 20));
+
+      if (result['token'] != null ||
+          result['message'].toString().contains('successfully')) {
         if (!mounted) return;
-        _showMsg('Registration successful! Please login.', Colors.green);
+        _showMsg(
+          result['message'] ??
+              'Registration successful! Pending Admin approval.',
+          Colors.green,
+        );
         Navigator.pop(context);
       } else {
         _showMsg(result['message'] ?? 'Registration Failed', Colors.redAccent);
@@ -86,19 +199,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   void _showMsg(String msg, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _usernameController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _phoneController.dispose();
     _houseNumberController.dispose();
     _addressController.dispose();
+    _lsgiNameController.dispose();
     _wardController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
@@ -117,7 +234,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 children: [
                   // Top Header Row
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 10,
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -159,7 +279,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ],
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 30),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 25,
+                      vertical: 30,
+                    ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -177,7 +300,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             size: 35,
                           ),
                         ),
-                        
+
                         const SizedBox(height: 15),
 
                         // Title
@@ -204,22 +327,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                         const SizedBox(height: 30),
 
-                        // Full Name Field
-                        _buildLabel("Resident Full Name"),
+                        // First Name Field
+                        _buildLabel("First Name"),
                         _buildTextField(
-                          controller: _nameController,
-                          hint: "Enter your full name",
+                          controller: _firstNameController,
+                          hint: "Enter your first name",
                           icon: Icons.person_outline_rounded,
                         ),
 
                         const SizedBox(height: 15),
 
-                        // Username Field (actually the email)
-                        _buildLabel("Username"),
+                        // Last Name Field
+                        _buildLabel("Last Name"),
                         _buildTextField(
-                          controller: _usernameController,
-                          hint: "Create a login username",
-                          icon: Icons.alternate_email_rounded,
+                          controller: _lastNameController,
+                          hint: "Enter your last name",
+                          icon: Icons.person_outline_rounded,
                         ),
 
                         const SizedBox(height: 15),
@@ -231,15 +354,107 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           hint: "10-digit mobile number",
                           icon: Icons.phone,
                           keyboardType: TextInputType.phone,
+                          maxLength: 10,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                         ),
 
                         const SizedBox(height: 15),
 
+                        // House Number Field
                         _buildLabel("House Number"),
                         _buildTextField(
                           controller: _houseNumberController,
-                          hint: "e.g. 12A",
-                          icon: Icons.numbers,
+                          hint: "1 to 3 digit house number",
+                          icon: Icons.home_outlined,
+                          keyboardType: TextInputType.number,
+                          maxLength: 3,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                        ),
+
+                        const SizedBox(height: 15),
+
+                        // District Selection
+                        _buildLabel("Select District"),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedDistrict,
+                              isExpanded: true,
+                              hint: const Text(
+                                'Select your district',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black38,
+                                ),
+                              ),
+                              items: _districts
+                                  .map(
+                                    (d) => DropdownMenuItem<String>(
+                                      value: d,
+                                      child: Text(d),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (val) {
+                                setState(() => _selectedDistrict = val);
+                              },
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 15),
+
+                        // LSGI Type Selection
+                        _buildLabel("LSGI Type"),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedLsgiType,
+                              isExpanded: true,
+                              hint: const Text(
+                                'Select LSGI Type',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black38,
+                                ),
+                              ),
+                              items: _lsgiTypes
+                                  .map(
+                                    (t) => DropdownMenuItem<String>(
+                                      value: t,
+                                      child: Text(t),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (val) {
+                                setState(() => _selectedLsgiType = val);
+                              },
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 15),
+
+                        // LSGI Name Field
+                        _buildLabel("LSGI Name"),
+                        _buildTextField(
+                          controller: _lsgiNameController,
+                          hint: "Enter Municipality/Panchayat name",
+                          icon: Icons.location_city,
                         ),
 
                         const SizedBox(height: 15),
@@ -248,35 +463,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         _buildLabel("Select Ward"),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
                               value: _selectedWardId,
                               isExpanded: true,
-                              hint: const Text('Select your ward', style: TextStyle(fontSize: 14, color: Colors.black38)),
-                              items: _wards.map((w) => DropdownMenuItem<String>(value: w['_id'], child: Text('Ward ${w['wardNumber']}: ${w['name']}'))).toList(),
+                              hint: const Text(
+                                'Select ward number and name',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black38,
+                                ),
+                              ),
+                              items: _wards
+                                  .map(
+                                    (w) => DropdownMenuItem<String>(
+                                      value: w['_id'],
+                                      child: Text(
+                                        'Ward ${w['wardNumber']} - ${w['name']}',
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
                               onChanged: (val) {
-                                setState(() => _selectedWardId = val);
-                                if (val != null) _fetchRoutes(val);
-                               },
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 15),
-
-                        // Route Selection
-                        _buildLabel("Select Route"),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedRouteId,
-                              isExpanded: true,
-                              hint: const Text('Select your route', style: TextStyle(fontSize: 14, color: Colors.black38)),
-                              items: _routes.map((r) => DropdownMenuItem<String>(value: r['_id'], child: Text(r['name']))).toList(),
-                              onChanged: (val) => setState(() => _selectedRouteId = val),
+                                if (val != null) {
+                                  setState(() => _selectedWardId = val);
+                                  _fetchRoutes(val);
+                                }
+                              },
                             ),
                           ),
                         ),
@@ -293,16 +510,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                         const SizedBox(height: 15),
 
-                        // Password Field
-                        _buildLabel("Password"),
-                        _buildTextField(
-                          controller: _passwordController,
-                          hint: "Create a strong password",
-                          icon: Icons.lock,
-                          obscureText: true,
-                        ),
-
-                        const SizedBox(height: 30),
+                        _buildLabel("Verification PDF"),
+                        _buildPdfUploadField(),
+                        const SizedBox(height: 15),
 
                         // Register Button
                         SizedBox(
@@ -310,7 +520,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           height: 50,
                           child: _isLoading
                               ? const Center(
-                                  child: CircularProgressIndicator(color: Colors.white),
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                  ),
                                 )
                               : ElevatedButton(
                                   style: ElevatedButton.styleFrom(
@@ -324,7 +536,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: const [
                                       Text(
-                                        "REGISTER",
+                                        "REGISTER NOW",
                                         style: TextStyle(
                                           color: Colors.black,
                                           fontSize: 16,
@@ -348,7 +560,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Container(
                           height: 1,
                           color: Colors.white.withOpacity(0.1),
-                          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 10,
+                          ),
                         ),
 
                         Row(
@@ -356,7 +571,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           children: [
                             const Text(
                               "Already have an account? ",
-                              style: TextStyle(color: Colors.white70, fontSize: 13),
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                              ),
                             ),
                             GestureDetector(
                               onTap: () => Navigator.pop(context),
@@ -378,7 +596,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: const [
-                            Icon(Icons.security, color: Colors.white54, size: 12),
+                            Icon(
+                              Icons.security,
+                              color: Colors.white54,
+                              size: 12,
+                            ),
                             SizedBox(width: 5),
                             Text(
                               "Secure registration powered by Harithakarma Sena",
@@ -420,26 +642,102 @@ class _RegisterScreenState extends State<RegisterScreen> {
     required String hint,
     required IconData icon,
     bool obscureText = false,
+    bool isPassword = false,
+    VoidCallback? onToggleVisibility,
     TextInputType keyboardType = TextInputType.text,
+    int? maxLength,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return SizedBox(
-      height: 48,
+      height: maxLength != null
+          ? 68
+          : 48, // Accommodate counter if maxLength is set
       child: TextField(
         controller: controller,
         obscureText: obscureText,
         keyboardType: keyboardType,
+        maxLength: maxLength,
+        inputFormatters: inputFormatters,
         style: const TextStyle(color: Colors.black87, fontSize: 14),
         decoration: InputDecoration(
+          counterText: "", // Hide the default counter text
           filled: true,
           fillColor: Colors.white,
           hintText: hint,
           hintStyle: const TextStyle(color: Colors.black38, fontSize: 14),
           prefixIcon: Icon(icon, color: Colors.black45, size: 20),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(
+                    obscureText ? Icons.visibility_off : Icons.visibility,
+                    color: Colors.black38,
+                    size: 20,
+                  ),
+                  onPressed: onToggleVisibility,
+                )
+              : null,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 12,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide.none,
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPdfUploadField() {
+    final hasFile = _verificationDocName != null;
+    return InkWell(
+      onTap: _pickVerificationPdf,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: hasFile ? const Color(0xFF00C853) : Colors.transparent,
+            width: 1.2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              hasFile
+                  ? Icons.picture_as_pdf_rounded
+                  : Icons.upload_file_rounded,
+              color: hasFile ? const Color(0xFF2E7D32) : Colors.black45,
+              size: 22,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                hasFile
+                    ? _verificationDocName!
+                    : 'Upload verification document PDF',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: hasFile ? Colors.black87 : Colors.black38,
+                  fontSize: 14,
+                  fontWeight: hasFile ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+            ),
+            Text(
+              hasFile ? 'Change' : 'PDF',
+              style: const TextStyle(
+                color: Color(0xFF2E7D32),
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
       ),
     );

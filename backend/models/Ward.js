@@ -4,6 +4,8 @@ const wardSchema = new mongoose.Schema({
     name: { type: String, required: true },
     wardNumber: { type: String, required: true, unique: true },
     description: { type: String },
+    startDate: { type: Date },
+    endDate: { type: Date },
     createdAt: { type: Date, default: Date.now }
 });
 

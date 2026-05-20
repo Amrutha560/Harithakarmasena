@@ -6,115 +6,94 @@ class WelcomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF6200EE), Color(0xFF03DAC6)],
-          ),
-        ),
+        color: Colors.white,
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // App Name + Icon
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 520),
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 42),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: const Color(0xFFE6F2E9), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 28,
+                      offset: const Offset(0, 14),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(7),
+                      height: 108,
+                      width: 108,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.25),
+                        color: const Color(0xFFE6F6EA),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.eco, color: Colors.white, size: 20),
+                      child: const Icon(Icons.eco_rounded, color: Color(0xFF2E7D32), size: 58),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(height: 28),
                     const Text(
-                      'Harithakarmasena',
+                      'Harithakarma Sena',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A1C1E),
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Waste Management System',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFF6F7A72),
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 34),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pushNamed(context, '/login'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2E7D32),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                          elevation: 8,
+                          shadowColor: const Color(0xFF2E7D32).withValues(alpha: 0.25),
+                        ),
+                        child: const Text(
+                          'Get Started',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 26),
+                    const Text(
+                      'CLEAN GREEN FUTURE',
+                      style: TextStyle(
+                        letterSpacing: 2,
+                        fontSize: 11,
+                        color: Color(0xFF2E7D32),
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 40),
-                // Hero Card — compact 180×180
-                Container(
-                  height: 180,
-                  width: 180,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(color: Colors.white.withOpacity(0.25), width: 1.5),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.recycling_rounded, size: 80, color: Colors.white),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'ECO • SMART',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 36),
-                // Title
-                const Text(
-                  'Smart Waste\nManagement',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    height: 1.25,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Efficient collection & smart recycling\nfor a cleaner community.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 48),
-                // Get Started Button — compact pill, 180px wide
-                ElevatedButton(
-                  onPressed: () => Navigator.pushNamed(context, '/login'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF6200EE),
-                    minimumSize: const Size(180, 50),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                    elevation: 6,
-                    shadowColor: Colors.black26,
-                  ),
-                  child: const Text(
-                    'Get Started →',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),

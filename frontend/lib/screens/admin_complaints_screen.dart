@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 
 class AdminComplaintsScreen extends StatefulWidget {
-  const AdminComplaintsScreen({super.key});
+  final bool embedded;
+
+  const AdminComplaintsScreen({super.key, this.embedded = false});
 
   @override
   _AdminComplaintsScreenState createState() => _AdminComplaintsScreenState();
@@ -30,6 +32,43 @@ class _AdminComplaintsScreenState extends State<AdminComplaintsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final content = _isLoading
+        ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7D32)))
+        : Padding(
+            padding: EdgeInsets.symmetric(horizontal: widget.embedded ? 32 : 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(height: widget.embedded ? 28 : 16),
+                Text(
+                  widget.embedded ? 'Complaints' : 'Recent Issues (${_complaints.length})',
+                  style: const TextStyle(color: Color(0xFF1A1C1E), fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  widget.embedded ? 'Review and resolve service-related feedback. ${_complaints.length} issue(s) found.' : 'Review and resolve service-related feedback.',
+                  style: const TextStyle(color: Colors.black38, fontSize: 14),
+                ),
+                const SizedBox(height: 32),
+                Expanded(
+                  child: _complaints.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          itemCount: _complaints.length,
+                          itemBuilder: (context, index) {
+                            final c = _complaints[index];
+                            return _buildComplaintCard(c);
+                          },
+                        ),
+                ),
+              ],
+            ),
+          );
+
+    if (widget.embedded) {
+      return Container(color: const Color(0xFFF8FAF9), child: content);
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAF9),
       appBar: AppBar(
@@ -42,38 +81,7 @@ class _AdminComplaintsScreenState extends State<AdminComplaintsScreen> {
         title: const Text('Resident Complaints', style: TextStyle(color: Color(0xFF1A1C1E), fontSize: 18, fontWeight: FontWeight.bold)),
         centerTitle: true,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7D32)))
-          : Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 16),
-                  Text(
-                    'Recent Issues (${_complaints.length})',
-                    style: const TextStyle(color: Color(0xFF1A1C1E), fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Review and resolve service-related feedback.',
-                    style: TextStyle(color: Colors.black38, fontSize: 14),
-                  ),
-                  const SizedBox(height: 32),
-                  Expanded(
-                    child: _complaints.isEmpty
-                        ? _buildEmptyState()
-                        : ListView.builder(
-                            itemCount: _complaints.length,
-                            itemBuilder: (context, index) {
-                              final c = _complaints[index];
-                              return _buildComplaintCard(c);
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
+      body: content,
     );
   }
 
@@ -178,9 +186,24 @@ class _AdminComplaintsScreenState extends State<AdminComplaintsScreen> {
                     style: const TextStyle(color: Colors.black87, fontSize: 13, height: 1.4),
                   ),
                   const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: _statusButton('RESOLVE CASE', const Color(0xFF2E7D32), () => _updateStatus(c['_id'], 'Resolved')),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _statusButton(
+                          'RESOLVE CASE',
+                          const Color(0xFF2E7D32),
+                          () => _updateStatus(c['_id'], 'Resolved'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _statusButton(
+                          'DELETE',
+                          Colors.redAccent,
+                          () => _deleteComplaint(c['_id']),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -206,20 +229,44 @@ class _AdminComplaintsScreenState extends State<AdminComplaintsScreen> {
   }
 
   Widget _statusButton(String label, Color color, VoidCallback onPressed) {
-    return Expanded(
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color.withOpacity(0.1),
-          foregroundColor: color,
-          elevation: 0,
-          side: BorderSide(color: color.withOpacity(0.3)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-        ),
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color.withOpacity(0.1),
+        foregroundColor: color,
+        elevation: 0,
+        side: BorderSide(color: color.withOpacity(0.3)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        padding: const EdgeInsets.symmetric(vertical: 12),
       ),
+      child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
     );
+  }
+
+  Future<void> _deleteComplaint(String id) async {
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete Complaint'),
+            content: const Text('Delete this complaint permanently?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) return;
+    setState(() => _isLoading = true);
+    await _apiService.deleteComplaint(id);
+    await _fetchComplaints();
   }
 
   Future<void> _updateStatus(String id, String status) async {

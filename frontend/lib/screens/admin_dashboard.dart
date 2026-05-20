@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../services/api_service.dart';
+import 'admin_complaints_screen.dart';
+import 'admin_resident_list_screen.dart';
 import 'create_staff_screen.dart';
+import 'manage_users_screen.dart';
+import 'reports_screen.dart';
+import 'scheduling_screen.dart';
+import 'staff_management_screen.dart';
 import 'ward_management_screen.dart';
+import 'admin_feedback_screen.dart';
+import 'settings_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -14,6 +21,7 @@ class AdminDashboard extends StatefulWidget {
 class _AdminDashboardState extends State<AdminDashboard> {
   final ApiService apiService = ApiService();
   List<dynamic> staffMembers = [];
+  List<dynamic> pendingResidents = [];
   Map<String, dynamic> stats = {};
   bool isLoading = true;
   int _selectedIndex = 0;
@@ -26,9 +34,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   void _fetchDashboardData() async {
     final fetchedStaff = await apiService.getStaff();
+    final allUsers = await apiService.getUsers();
     final fetchedStats = await apiService.getAdminStats();
+
     setState(() {
       staffMembers = fetchedStaff;
+      pendingResidents = allUsers
+          .where((u) => u['role'] == 'resident' && u['isApproved'] == false)
+          .toList();
       stats = fetchedStats;
       isLoading = false;
     });
@@ -37,6 +50,38 @@ class _AdminDashboardState extends State<AdminDashboard> {
   void _logout() async {
     await apiService.logout();
     Navigator.pushReplacementNamed(context, '/login');
+  }
+
+  Future<void> _deleteStaff(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Staff?'),
+        content: const Text(
+          'Are you sure you want to remove this staff member?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => isLoading = true);
+      await apiService.deleteUser(id);
+      _fetchDashboardData();
+    }
   }
 
   @override
@@ -52,43 +97,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             child: Column(
               children: [
                 _buildTopBar(),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Overview',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1A1C1E), // Dark text
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Real-time waste management monitoring',
-                          style: TextStyle(color: Colors.black45, fontSize: 16),
-                        ),
-                        const SizedBox(height: 40),
-                        // Stats Grid
-                        _buildStatsGrid(),
-                        const SizedBox(height: 40),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Revenue Chart Card
-                            Expanded(flex: 3, child: _buildRevenueChartCard()),
-                            const SizedBox(width: 32),
-                            // Staff List Section
-                            Expanded(flex: 2, child: _buildRecentStaffList()),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                Expanded(child: _buildSelectedPage()),
               ],
             ),
           ),
@@ -106,13 +115,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
       {'icon': Icons.calendar_month_outlined, 'label': 'Scheduling'},
       {'icon': Icons.report_problem_outlined, 'label': 'Complaints'},
       {'icon': Icons.bar_chart_rounded, 'label': 'Reports'},
+      {'icon': Icons.message_outlined, 'label': 'Feedback'},
+      {'icon': Icons.settings_outlined, 'label': 'Settings'},
     ];
 
     return Container(
       width: 280,
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(right: BorderSide(color: Colors.black.withOpacity(0.05))),
+        border: Border(
+          right: BorderSide(color: Colors.black.withOpacity(0.05)),
+        ),
       ),
       child: Column(
         children: [
@@ -122,11 +135,26 @@ class _AdminDashboardState extends State<AdminDashboard> {
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(color: Color(0xFFE8F5E9), shape: BoxShape.circle),
-                  child: const Icon(Icons.eco, color: Color(0xFF2E7D32), size: 24),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE8F5E9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.eco,
+                    color: Color(0xFF2E7D32),
+                    size: 24,
+                  ),
                 ),
                 const SizedBox(width: 16),
-                const Text('Harithakarma', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A1C1E), letterSpacing: 0.5)),
+                const Text(
+                  'Harithakarma',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A1C1E),
+                    letterSpacing: 0.5,
+                  ),
+                ),
               ],
             ),
           ),
@@ -140,27 +168,61 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
                 if (item['isParent'] == true) {
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 4,
+                    ),
                     child: Theme(
-                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                      data: Theme.of(
+                        context,
+                      ).copyWith(dividerColor: Colors.transparent),
                       child: ExpansionTile(
-                        leading: Icon(item['icon'], color: isSelected ? const Color(0xFF2E7D32) : Colors.black38),
-                        title: Text(item['label'], style: TextStyle(color: isSelected ? Colors.black : Colors.black38, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                        leading: Icon(
+                          item['icon'],
+                          color: isSelected
+                              ? const Color(0xFF2E7D32)
+                              : Colors.black38,
+                        ),
+                        title: Text(
+                          item['label'],
+                          style: TextStyle(
+                            color: isSelected ? Colors.black : Colors.black38,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
                         children: [
                           ListTile(
                             contentPadding: const EdgeInsets.only(left: 48),
-                            title: const Text('Staff List', style: TextStyle(fontSize: 13, color: Colors.black54)),
+                            title: const Text(
+                              'Staff List',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.black54,
+                              ),
+                            ),
                             onTap: () {
                               setState(() => _selectedIndex = index);
-                              Navigator.pushNamed(context, '/admin/staff');
                             },
                           ),
                           ListTile(
                             contentPadding: const EdgeInsets.only(left: 48),
-                            title: const Text('Add Staff', style: TextStyle(fontSize: 13, color: Colors.black54)),
+                            title: const Text(
+                              'Add Staff',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.black54,
+                              ),
+                            ),
                             onTap: () {
                               setState(() => _selectedIndex = index);
-                              Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateStaffScreen())).then((_) => _fetchDashboardData());
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const CreateStaffScreen(),
+                                ),
+                              ).then((_) => _fetchDashboardData());
                             },
                           ),
                         ],
@@ -170,20 +232,35 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 }
 
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 4,
+                  ),
                   child: ListTile(
                     onTap: () {
                       setState(() => _selectedIndex = index);
-                      if (index == 1) Navigator.pushNamed(context, '/admin/users');
-                      if (index == 3) Navigator.push(context, MaterialPageRoute(builder: (_) => const WardManagementScreen()));
-                      if (index == 4) Navigator.pushNamed(context, '/admin/scheduling');
-                      if (index == 5) Navigator.pushNamed(context, '/admin/complaints');
-                      if (index == 6) Navigator.pushNamed(context, '/admin/reports');
                     },
-                    leading: Icon(item['icon'], color: isSelected ? const Color(0xFF2E7D32) : Colors.black38),
-                    title: Text(item['label'], style: TextStyle(color: isSelected ? Colors.black : Colors.black38, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    tileColor: isSelected ? const Color(0xFFE8F5E9) : Colors.transparent,
+                    leading: Icon(
+                      item['icon'],
+                      color: isSelected
+                          ? const Color(0xFF2E7D32)
+                          : Colors.black38,
+                    ),
+                    title: Text(
+                      item['label'],
+                      style: TextStyle(
+                        color: isSelected ? Colors.black : Colors.black38,
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    tileColor: isSelected
+                        ? const Color(0xFFE8F5E9)
+                        : Colors.transparent,
                   ),
                 );
               },
@@ -195,9 +272,77 @@ class _AdminDashboardState extends State<AdminDashboard> {
             child: ListTile(
               onTap: _logout,
               leading: const Icon(Icons.logout, color: Colors.redAccent),
-              title: const Text('Logout', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              title: const Text(
+                'Logout',
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectedPage() {
+    switch (_selectedIndex) {
+      case 1:
+        return const AdminResidentListScreen(embedded: true);
+      case 2:
+        return const StaffManagementScreen(embedded: true);
+      case 3:
+        return const WardManagementScreen(embedded: true);
+      case 4:
+        return const SchedulingScreen(embedded: true);
+      case 5:
+        return const AdminComplaintsScreen(embedded: true);
+      case 6:
+        return const ReportsScreen(embedded: true);
+      case 7:
+        return const AdminFeedbackScreen();
+      case 8:
+        return const SettingsScreen();
+      case 9:
+        return const ManageUsersScreen();
+      default:
+        return _buildOverviewContent();
+    }
+  }
+
+  Widget _buildOverviewContent() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Overview',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1A1C1E),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Real-time waste management monitoring',
+            style: TextStyle(color: Colors.black45, fontSize: 16),
+          ),
+          const SizedBox(height: 40),
+          _buildStatsGrid(),
+          const SizedBox(height: 40),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 3, child: _buildPendingResidentsList()),
+              const SizedBox(width: 32),
+              Expanded(flex: 2, child: _buildRecentStaffList()),
+            ],
           ),
         ],
       ),
@@ -210,7 +355,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
       padding: const EdgeInsets.symmetric(horizontal: 32),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.black.withOpacity(0.05))),
+        border: Border(
+          bottom: BorderSide(color: Colors.black.withOpacity(0.05)),
+        ),
       ),
       child: Row(
         children: [
@@ -236,7 +383,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           const SizedBox(width: 32),
           _topBarIcon(Icons.notifications_none_rounded),
           const SizedBox(width: 16),
-          _topBarIcon(Icons.settings_outlined),
+          _topBarIcon(
+            Icons.settings_outlined,
+            onTap: () => setState(() => _selectedIndex = 8),
+          ),
           const SizedBox(width: 32),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -254,10 +404,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 SizedBox(width: 12),
                 Text(
                   'Super Admin',
-                  style: TextStyle(color: Color(0xFF1A1C1E), fontWeight: FontWeight.bold, fontSize: 13),
+                  style: TextStyle(
+                    color: Color(0xFF1A1C1E),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
                 SizedBox(width: 8),
-                Icon(Icons.keyboard_arrow_down, color: Colors.black26, size: 18),
+                Icon(
+                  Icons.keyboard_arrow_down,
+                  color: Colors.black26,
+                  size: 18,
+                ),
               ],
             ),
           ),
@@ -266,78 +424,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _topBarIcon(IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF4F7F6),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(icon, color: Colors.black54, size: 20),
-    );
-  }
-
-  Widget _buildStatsGrid() {
-    final List<Map<String, dynamic>> metricItems = [
-      {'label': 'Residents', 'value': stats['totalResidents']?.toString() ?? '0', 'trend': '+12%', 'icon': Icons.people_alt_outlined},
-      {'label': 'Staff', 'value': stats['totalStaff']?.toString() ?? '0', 'trend': 'Active', 'icon': Icons.badge_outlined},
-      {'label': 'Revenue', 'value': '₹${stats['totalRevenue']?.toString() ?? '0'}', 'trend': '+8%', 'icon': Icons.account_balance_wallet_outlined},
-      {'label': 'Complaints', 'value': stats['pendingComplaints']?.toString() ?? '0', 'trend': 'Pending', 'icon': Icons.error_outline_rounded},
-      {'label': 'System Users', 'value': stats['totalUsers']?.toString() ?? '0', 'trend': 'Online', 'icon': Icons.hub_outlined},
-    ];
-
-    return Row(
-      children: metricItems.map((item) => Expanded(
-        child: Container(
-          margin: const EdgeInsets.only(right: 20),
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.black.withOpacity(0.05)),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(item['icon'], color: const Color(0xFF2E7D32), size: 20),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                item['value'],
-                style: const TextStyle(color: Color(0xFF1A1C1E), fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(item['label'], style: const TextStyle(color: Colors.black45, fontSize: 13)),
-                  Text(
-                    item['trend'],
-                    style: TextStyle(
-                      color: item['trend'].startsWith('+') ? const Color(0xFF2E7D32) : Colors.black38,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      )).toList(),
-    );
-  }
-
-  Widget _buildRevenueChartCard() {
+  Widget _buildPendingResidentsList() {
     return Container(
       height: 420,
       padding: const EdgeInsets.all(32),
@@ -352,108 +439,243 @@ class _AdminDashboardState extends State<AdminDashboard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Collection Analytics',
-                    style: TextStyle(color: Color(0xFF1A1C1E), fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 4),
-                  Text('Weekly performance metrics', style: TextStyle(color: Colors.black38, fontSize: 13)),
-                ],
+              const Text(
+                'Approval Requests',
+                style: TextStyle(
+                  color: Color(0xFF1A1C1E),
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.black12),
-                  borderRadius: BorderRadius.circular(8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
                 ),
-                child: const Row(
-                  children: [
-                    Text('This Week', style: TextStyle(color: Colors.black54, fontSize: 12)),
-                    SizedBox(width: 8),
-                    Icon(Icons.keyboard_arrow_down, color: Colors.black26, size: 16),
-                  ],
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${pendingResidents.length} Pending',
+                  style: const TextStyle(
+                    color: Colors.orange,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 32),
           Expanded(
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (value) => const FlLine(color: Colors.black12, strokeWidth: 1),
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 30,
-                      interval: 1,
-                      getTitlesWidget: (value, meta) {
-                        const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-                        if (value.toInt() >= 0 && value.toInt() < days.length) {
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 8.0),
-                            child: Text(days[value.toInt()], style: const TextStyle(color: Colors.black38, fontSize: 11)),
-                          );
-                        }
-                        return const Text('');
-                      },
+            child: pendingResidents.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No new registration requests',
+                      style: TextStyle(color: Colors.black26, fontSize: 14),
                     ),
+                  )
+                : ListView.builder(
+                    itemCount: pendingResidents.length,
+                    itemBuilder: (context, index) {
+                      final resident = pendingResidents[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 20.0),
+                        child: Row(
+                          children: [
+                            Container(
+                              height: 48,
+                              width: 48,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF3E0),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.person_add_alt_1_rounded,
+                                color: Colors.orange,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${resident['firstName']} ${resident['lastName']}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Mob: ${resident['phoneNumber'] ?? 'N/A'}',
+                                    style: const TextStyle(
+                                      color: Colors.black26,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () =>
+                                  setState(() => _selectedIndex = 1),
+                              child: const Text(
+                                'Review',
+                                style: TextStyle(
+                                  color: Color(0xFF2E7D32),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text(value.toInt().toString(), style: const TextStyle(color: Colors.black38, fontSize: 11));
-                      },
-                    ),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: const [
-                      FlSpot(0, 180),
-                      FlSpot(1, 240),
-                      FlSpot(2, 210),
-                      FlSpot(3, 300),
-                      FlSpot(4, 280),
-                      FlSpot(5, 350),
-                      FlSpot(6, 310),
-                    ],
-                    isCurved: true,
-                    color: const Color(0xFF2E7D32),
-                    barWidth: 4,
-                    isStrokeCapRound: true,
-                    dotData: const FlDotData(show: false),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      gradient: LinearGradient(
-                        colors: [
-                          const Color(0xFF2E7D32).withOpacity(0.1),
-                          const Color(0xFF2E7D32).withOpacity(0.0),
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ),
-                    ),
-                  ),
-                ],
+          ),
+          const Divider(height: 32),
+          Center(
+            child: TextButton(
+              onPressed: () => setState(() => _selectedIndex = 1),
+              child: const Text(
+                'Manage All Residents',
+                style: TextStyle(color: Colors.black38, fontSize: 13),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _topBarIcon(IconData icon, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4F7F6),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: Colors.black54, size: 20),
+      ),
+    );
+  }
+
+  Widget _buildStatsGrid() {
+    final List<Map<String, dynamic>> metricItems = [
+      {
+        'label': 'Residents',
+        'value': stats['totalResidents']?.toString() ?? '0',
+        'trend': '+12%',
+        'icon': Icons.people_alt_outlined,
+      },
+      {
+        'label': 'Staff',
+        'value': stats['totalStaff']?.toString() ?? '0',
+        'trend': 'Active',
+        'icon': Icons.badge_outlined,
+      },
+      {
+        'label': 'Complaints',
+        'value': stats['pendingComplaints']?.toString() ?? '0',
+        'trend': 'Pending',
+        'icon': Icons.error_outline_rounded,
+      },
+      {
+        'label': 'System Users',
+        'value': stats['totalUsers']?.toString() ?? '0',
+        'trend': 'Online',
+        'icon': Icons.hub_outlined,
+      },
+    ];
+
+    return Row(
+      children: metricItems
+          .map(
+            (item) => Expanded(
+              child: InkWell(
+                onTap: () {
+                  if (item['label'] == 'Residents')
+                    setState(() => _selectedIndex = 1);
+                  if (item['label'] == 'Staff')
+                    setState(() => _selectedIndex = 2);
+                  if (item['label'] == 'Complaints')
+                    setState(() => _selectedIndex = 5);
+                  if (item['label'] == 'System Users')
+                    setState(() => _selectedIndex = 10);
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 20),
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.black.withOpacity(0.05)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.02),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          item['icon'],
+                          color: const Color(0xFF2E7D32),
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        item['value'],
+                        style: const TextStyle(
+                          color: Color(0xFF1A1C1E),
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            item['label'],
+                            style: const TextStyle(
+                              color: Colors.black45,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            item['trend'],
+                            style: TextStyle(
+                              color: item['trend'].startsWith('+')
+                                  ? const Color(0xFF2E7D32)
+                                  : Colors.black38,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -474,12 +696,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
             children: [
               const Text(
                 'Top Staff',
-                style: TextStyle(color: Color(0xFF1A1C1E), fontSize: 20, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Color(0xFF1A1C1E),
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               GestureDetector(
                 onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => CreateStaffScreen()))
-                      .then((value) => _fetchDashboardData());
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => CreateStaffScreen()),
+                  ).then((value) => _fetchDashboardData());
                 },
                 child: Container(
                   padding: const EdgeInsets.all(6),
@@ -495,9 +723,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
           const SizedBox(height: 32),
           Expanded(
             child: isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7D32)))
+                ? const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF2E7D32)),
+                  )
                 : ListView.builder(
-                    itemCount: staffMembers.length > 5 ? 5 : staffMembers.length,
+                    itemCount: staffMembers.length > 5
+                        ? 5
+                        : staffMembers.length,
                     itemBuilder: (context, index) {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 20.0),
@@ -510,7 +742,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 color: const Color(0xFFF4F7F6),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(Icons.person_outline, color: Color(0xFF2E7D32)),
+                              child: const Icon(
+                                Icons.person_outline,
+                                color: Color(0xFF2E7D32),
+                              ),
                             ),
                             const SizedBox(width: 16),
                             Expanded(
@@ -518,26 +753,54 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    staffMembers[index]['name'],
-                                    style: const TextStyle(color: Color(0xFF1A1C1E), fontWeight: FontWeight.bold),
+                                    staffMembers[index]['firstName'] != null
+                                        ? '${staffMembers[index]['firstName']} ${staffMembers[index]['lastName'] ?? ''}'
+                                        : staffMembers[index]['name'] ??
+                                              'Unknown Staff',
+                                    style: const TextStyle(
+                                      color: Color(0xFF1A1C1E),
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                   Text(
                                     staffMembers[index]['email'],
-                                    style: const TextStyle(color: Colors.black26, fontSize: 12),
+                                    style: const TextStyle(
+                                      color: Colors.black26,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFE8F5E9),
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: const Text(
                                 'Active',
-                                style: TextStyle(color: Color(0xFF2E7D32), fontSize: 10, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                  color: Color(0xFF2E7D32),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.redAccent,
+                                size: 20,
+                              ),
+                              onPressed: () =>
+                                  _deleteStaff(staffMembers[index]['_id']),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
                             ),
                           ],
                         ),
@@ -548,8 +811,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
           const SizedBox(height: 16),
           Center(
             child: TextButton(
-              onPressed: () => Navigator.pushNamed(context, '/admin/staff'),
-              child: const Text('View All Staff', style: TextStyle(color: Color(0xFF2E7D32), fontSize: 13)),
+              onPressed: () => setState(() => _selectedIndex = 2),
+              child: const Text(
+                'View All Staff',
+                style: TextStyle(color: Color(0xFF2E7D32), fontSize: 13),
+              ),
             ),
           ),
         ],

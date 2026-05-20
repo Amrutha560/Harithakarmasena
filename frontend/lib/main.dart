@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/admin_dashboard.dart';
@@ -11,6 +10,8 @@ import 'screens/staff_management_screen.dart'; // Ensure this exists or rename f
 import 'screens/scheduling_screen.dart';
 import 'screens/admin_complaints_screen.dart';
 import 'screens/reports_screen.dart';
+import 'screens/admin_resident_list_screen.dart';
+import 'screens/change_password_screen.dart';
 
 void main() {
   runApp(MyApp());
@@ -72,16 +73,18 @@ class MyApp extends StatelessWidget {
       ),
       initialRoute: '/',
       routes: {
-        '/': (context) => SplashScreen(),
+        '/': (context) => WelcomeScreen(),
         '/welcome': (context) => WelcomeScreen(),
         '/login': (context) => LoginScreen(),
         '/register': (context) => RegisterScreen(),
         '/admin': (context) => AdminDashboard(),
         '/admin/users': (context) => const ManageUsersScreen(),
+        '/admin/residents': (context) => const AdminResidentListScreen(),
         '/admin/staff': (context) => const StaffManagementScreen(),
         '/admin/scheduling': (context) => const SchedulingScreen(),
         '/admin/complaints': (context) => const AdminComplaintsScreen(),
         '/admin/reports': (context) => const ReportsScreen(),
+        '/change-password': (context) => const ChangePasswordScreen(),
         '/resident': (context) => const ResidentDashboard(),
         '/staff': (context) => const StaffDashboard(),
       },

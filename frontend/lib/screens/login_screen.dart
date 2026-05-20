@@ -3,10 +3,10 @@ import 'register_screen.dart';
 import '../services/api_service.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
-  _LoginScreenState createState() => _LoginScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
@@ -15,6 +15,13 @@ class _LoginScreenState extends State<LoginScreen> {
   final ApiService apiService = ApiService();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  String _selectedRole = 'resident';
+
+  @override
+  void initState() {
+    super.initState();
+    apiService.logout();
+  }
 
   void _login() async {
     final username = _usernameController.text.trim().toLowerCase();
@@ -28,31 +35,21 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      Map<String, dynamic>? result;
-      String currentRole = 'resident';
-
-      // 1. Try resident login with raw username
-      result = await apiService.login('resident/login', username, password);
-
-      // 2. If resident login fails (no token), try staff login
-      if (result['token'] == null) {
-        result = await apiService.login('staff/login', username, password);
-        currentRole = 'staff';
-      }
-
-      // 3. If staff login fails, try admin login
-      if (result['token'] == null) {
-        result = await apiService.login('admin/login', username, password);
-        currentRole = 'admin';
-      }
+      final result = await apiService.login(
+        '$_selectedRole/login',
+        username,
+        password,
+      );
+      final currentRole = result['user']?['role'] ?? _selectedRole;
 
       if (!mounted) return;
 
       // Ensure that we successfully retrieved a token
-      if (result['token'] != null) {
+      if (result != null && result['token'] != null) {
         await apiService.saveToken(result['token'], currentRole);
+        if (!mounted) return;
         _showMsg('Login successful!', Colors.green);
-        
+
         // Navigate based on resolved role
         if (currentRole == 'resident') {
           Navigator.pushReplacementNamed(context, '/resident');
@@ -62,7 +59,10 @@ class _LoginScreenState extends State<LoginScreen> {
           Navigator.pushReplacementNamed(context, '/staff');
         }
       } else {
-        _showMsg(result['message'] ?? 'Invalid credentials. Please try again.', Colors.redAccent);
+        _showMsg(
+          result?['message'] ?? 'Invalid credentials. Please try again.',
+          Colors.redAccent,
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -74,8 +74,177 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showMsg(String msg, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
+  }
+
+  void _showForgotPasswordDialog() {
+    final identifierController = TextEditingController(
+      text: _usernameController.text.trim(),
+    );
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool obscureNewPassword = true;
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> submit() async {
+              final identifier = identifierController.text.trim();
+              final newPassword = newPasswordController.text;
+              final confirmPassword = confirmPasswordController.text;
+
+              if (identifier.isEmpty ||
+                  newPassword.isEmpty ||
+                  confirmPassword.isEmpty) {
+                _showMsg(
+                  'Please fill all password reset fields',
+                  Colors.orange,
+                );
+                return;
+              }
+              if (newPassword.length < 6) {
+                _showMsg(
+                  'Password must be at least 6 characters',
+                  Colors.orange,
+                );
+                return;
+              }
+              if (newPassword != confirmPassword) {
+                _showMsg('Passwords do not match', Colors.orange);
+                return;
+              }
+
+              setDialogState(() => isSubmitting = true);
+              final result = await apiService.forgotPassword(
+                role: _selectedRole,
+                identifier: identifier,
+                newPassword: newPassword,
+              );
+              if (!mounted) return;
+              setDialogState(() => isSubmitting = false);
+
+              final message =
+                  result['message']?.toString() ?? 'Password reset failed';
+              if (message.toLowerCase().contains('success')) {
+                Navigator.pop(dialogContext);
+                _passwordController.text = newPassword;
+                _showMsg(message, Colors.green);
+              } else {
+                _showMsg(message, Colors.redAccent);
+              }
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              title: const Text(
+                'Forgot Password',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              content: SizedBox(
+                width: 360,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Reset password for ${_selectedRole[0].toUpperCase()}${_selectedRole.substring(1)} account',
+                      style: const TextStyle(
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: identifierController,
+                      decoration: InputDecoration(
+                        labelText: _selectedRole == 'resident'
+                            ? 'House number, mobile, or name'
+                            : 'Email, phone, or name',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: newPasswordController,
+                      obscureText: obscureNewPassword,
+                      decoration: InputDecoration(
+                        labelText: 'New password',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        suffixIcon: IconButton(
+                          onPressed: () => setDialogState(
+                            () => obscureNewPassword = !obscureNewPassword,
+                          ),
+                          icon: Icon(
+                            obscureNewPassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: confirmPasswordController,
+                      obscureText: obscureNewPassword,
+                      decoration: InputDecoration(
+                        labelText: 'Confirm password',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onSubmitted: (_) => submit(),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting ? null : submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2E7D32),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Reset Password'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      identifierController.dispose();
+      newPasswordController.dispose();
+      confirmPasswordController.dispose();
+    });
   }
 
   @override
@@ -88,33 +257,26 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFF1FAF63),
-              Color(0xFF6EDC44),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
+        color: Colors.white,
         child: Center(
           child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
             child: Container(
               constraints: const BoxConstraints(maxWidth: 400),
               padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 40),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.2)),
+                border: Border.all(color: const Color(0xFFE6F2E9)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 24,
+                    offset: const Offset(0, 12),
                   ),
                 ],
               ),
@@ -122,18 +284,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  
                   /// Leaf Icon Circle
                   Container(
                     height: 90,
                     width: 90,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: const Color(0xFFE6F6EA),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       Icons.eco,
-                      color: Colors.white,
+                      color: Color(0xFF2E7D32),
                       size: 45,
                     ),
                   ),
@@ -146,7 +307,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: TextStyle(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: Color(0xFF1A1C1E),
                     ),
                   ),
 
@@ -154,29 +315,72 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const Text(
                     "Waste Management System",
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white70,
-                    ),
+                    style: TextStyle(fontSize: 14, color: Color(0xFF6F7A72)),
                   ),
 
                   const SizedBox(height: 40),
+
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'resident',
+                        label: Text('Resident'),
+                        icon: Icon(Icons.home_rounded),
+                      ),
+                      ButtonSegment(
+                        value: 'staff',
+                        label: Text('Staff'),
+                        icon: Icon(Icons.badge_rounded),
+                      ),
+                      ButtonSegment(
+                        value: 'admin',
+                        label: Text('Admin'),
+                        icon: Icon(Icons.admin_panel_settings_rounded),
+                      ),
+                    ],
+                    selected: {_selectedRole},
+                    onSelectionChanged: (selection) {
+                      setState(() => _selectedRole = selection.first);
+                    },
+                    style: ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.selected)
+                            ? Colors.white
+                            : const Color(0xFF2E7D32),
+                      ),
+                      backgroundColor: WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.selected)
+                            ? const Color(0xFF2E7D32)
+                            : Colors.white,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
 
                   /// Username Field
                   TextField(
                     controller: _usernameController,
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.15),
-                      prefixIcon: const Icon(Icons.person, color: Colors.white),
-                      hintText: "Username or mobile number",
-                      hintStyle: const TextStyle(color: Colors.white70),
+                      fillColor: const Color(0xFFF7FAF8),
+                      prefixIcon: const Icon(
+                        Icons.person,
+                        color: Color(0xFF2E7D32),
+                      ),
+                      hintText: _selectedRole == 'admin'
+                          ? "Admin email"
+                          : _selectedRole == 'staff'
+                          ? "Staff email, phone, or name"
+                          : "House number, mobile, or name",
+                      hintStyle: const TextStyle(color: Color(0xFF8A928D)),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
                         borderSide: BorderSide.none,
                       ),
                     ),
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: Color(0xFF1A1C1E)),
                   ),
 
                   const SizedBox(height: 20),
@@ -187,12 +391,17 @@ class _LoginScreenState extends State<LoginScreen> {
                     obscureText: _obscurePassword,
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.15),
-                      prefixIcon: const Icon(Icons.lock, color: Colors.white),
+                      fillColor: const Color(0xFFF7FAF8),
+                      prefixIcon: const Icon(
+                        Icons.lock,
+                        color: Color(0xFF2E7D32),
+                      ),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                          color: Colors.white70,
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          color: const Color(0xFF2E7D32),
                         ),
                         onPressed: () {
                           setState(() {
@@ -201,13 +410,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                       ),
                       hintText: "Enter your password",
-                      hintStyle: const TextStyle(color: Colors.white70),
+                      hintStyle: const TextStyle(color: Color(0xFF8A928D)),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
                         borderSide: BorderSide.none,
                       ),
                     ),
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: Color(0xFF1A1C1E)),
                   ),
 
                   const SizedBox(height: 10),
@@ -216,10 +425,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {},
+                      onPressed: _showForgotPasswordDialog,
                       child: const Text(
                         "Forgot Password?",
-                        style: TextStyle(color: Colors.white70),
+                        style: TextStyle(color: Color(0xFF2E7D32)),
                       ),
                     ),
                   ),
@@ -232,18 +441,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     height: 50,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
+                        backgroundColor: const Color(0xFF2E7D32),
+                        foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(15),
                         ),
                       ),
                       onPressed: _isLoading ? null : _login,
-                      child: _isLoading 
-                          ? const CircularProgressIndicator(color: Colors.green)
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(
                               "Login",
                               style: TextStyle(
-                                color: Colors.green,
+                                color: Colors.white,
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -259,7 +469,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       const Text(
                         "Don't have an account? ",
-                        style: TextStyle(color: Colors.white70),
+                        style: TextStyle(color: Color(0xFF6F7A72)),
                       ),
                       GestureDetector(
                         onTap: () {
@@ -273,9 +483,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: const Text(
                           "Register as resident",
                           style: TextStyle(
-                            color: Colors.white,
+                            color: Color(0xFF2E7D32),
                             fontWeight: FontWeight.bold,
                             decoration: TextDecoration.underline,
+                            decorationColor: Color(0xFF2E7D32),
                           ),
                         ),
                       ),
@@ -289,7 +500,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: TextStyle(
                       letterSpacing: 2,
                       fontSize: 10,
-                      color: Colors.white70,
+                      color: Color(0xFF2E7D32),
                     ),
                   ),
                 ],

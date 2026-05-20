@@ -14,15 +14,11 @@ class _CreateStaffScreenState extends State<CreateStaffScreen> {
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
-  final _passwordController = TextEditingController();
   final _areaController = TextEditingController();
   final ApiService apiService = ApiService();
   bool _isLoading = false;
-  bool _isAutoPassword = true;
   List<dynamic> _wards = [];
-  List<dynamic> _routes = [];
   String? _selectedWardId;
-  String? _selectedRouteId;
 
   @override
   void initState() {
@@ -34,9 +30,6 @@ class _CreateStaffScreenState extends State<CreateStaffScreen> {
       _phoneController.text = widget.staffToEdit!['phoneNumber'] ?? '';
       _addressController.text = widget.staffToEdit!['address'] ?? '';
       _selectedWardId = widget.staffToEdit!['ward'];
-      _selectedRouteId = widget.staffToEdit!['route'];
-      _isAutoPassword = false;
-      if (_selectedWardId != null) _fetchRoutes(_selectedWardId!);
     }
   }
 
@@ -45,10 +38,6 @@ class _CreateStaffScreenState extends State<CreateStaffScreen> {
     setState(() => _wards = wards);
   }
 
-  Future<void> _fetchRoutes(String wardId) async {
-    final routes = await apiService.getRoutes(wardId: wardId);
-    setState(() => _routes = routes);
-  }
 
   void _submit() async {
     if (_nameController.text.isEmpty || _emailController.text.isEmpty) {
@@ -64,7 +53,6 @@ class _CreateStaffScreenState extends State<CreateStaffScreen> {
       'phoneNumber': _phoneController.text,
       'address': _addressController.text,
       'ward': _selectedWardId,
-      'route': _selectedRouteId,
     };
 
     if (widget.staffToEdit != null) {
@@ -80,9 +68,8 @@ class _CreateStaffScreenState extends State<CreateStaffScreen> {
       final result = await apiService.createStaff(
         _nameController.text,
         _emailController.text,
-        _isAutoPassword ? "" : _passwordController.text,
+        "",
         wardId: _selectedWardId,
-        routeId: _selectedRouteId,
         phoneNumber: _phoneController.text,
         address: _addressController.text,
       );
@@ -93,7 +80,7 @@ class _CreateStaffScreenState extends State<CreateStaffScreen> {
         _showSuccessDialog(
           _nameController.text,
           _emailController.text,
-          result['generatedPassword'] ?? _passwordController.text,
+          result['emailSent'] == true,
         );
       } else {
         _showMsg(result['message'] ?? 'Creation failed', Colors.redAccent);
@@ -105,7 +92,7 @@ class _CreateStaffScreenState extends State<CreateStaffScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating));
   }
 
-  void _showSuccessDialog(String name, String username, String pass) {
+  void _showSuccessDialog(String name, String username, bool emailSent) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -117,11 +104,19 @@ class _CreateStaffScreenState extends State<CreateStaffScreen> {
           children: [
             const Text('Account Created!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
             const SizedBox(height: 12),
-            Text('Credentials for $name:', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+            Text('Staff account for $name has been created.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
             const SizedBox(height: 24),
             _credentialItem('USERNAME', username),
             const SizedBox(height: 12),
-            _credentialItem('PASSWORD', pass),
+            _credentialItem('PASSWORD', emailSent ? 'Sent to staff email' : 'Email not configured'),
+            const SizedBox(height: 12),
+            Text(
+              emailSent
+                  ? 'The temporary password was emailed to the staff member. They must change it after first login.'
+                  : 'Set EMAIL_USER in backend/.env and restart the backend to send real emails.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
           ],
         ),
         actions: [
@@ -230,7 +225,6 @@ class _CreateStaffScreenState extends State<CreateStaffScreen> {
                                   items: _wards.map((w) => DropdownMenuItem<String>(value: w['_id'], child: Text('Ward ${w['wardNumber']}'))).toList(),
                                   onChanged: (val) {
                                     setState(() => _selectedWardId = val);
-                                    if (val != null) _fetchRoutes(val);
                                   },
                                 ),
                               ),
@@ -241,71 +235,14 @@ class _CreateStaffScreenState extends State<CreateStaffScreen> {
                     ],
                   ),
                   const SizedBox(height: 32),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Route Assignment', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black87)),
-                            const SizedBox(height: 12),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              decoration: BoxDecoration(border: Border.all(color: Colors.black12), borderRadius: BorderRadius.circular(8)),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: _selectedRouteId,
-                                  isExpanded: true,
-                                  hint: const Text('Select Route', style: TextStyle(color: Colors.black26, fontSize: 13)),
-                                  items: _routes.map((r) => DropdownMenuItem<String>(value: r['_id'], child: Text(r['name']))).toList(),
-                                  onChanged: (val) => setState(() => _selectedRouteId = val),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 40),
-                      const Spacer(),
-                    ],
-                  ),
-                  const SizedBox(height: 32),
-                  const Text('Category', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.black12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Select category', style: TextStyle(color: Colors.black26, fontSize: 13)),
-                        Icon(Icons.keyboard_arrow_down, color: Colors.black54),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 32),
                   const SizedBox(height: 32),
                   _buildInput('Description / Address', 'Enter official description', _addressController, maxLines: 4),
                   if (!isEdit) ...[
                     const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: _isAutoPassword,
-                          activeColor: const Color(0xFFE65100),
-                          onChanged: (v) => setState(() => _isAutoPassword = v!),
-                        ),
-                        const Text('Auto-generate system password', style: TextStyle(fontSize: 13, color: Colors.black87)),
-                      ],
+                    const Text(
+                      'A temporary password will be generated and emailed to the staff member.',
+                      style: TextStyle(fontSize: 13, color: Colors.black54),
                     ),
-                    if (!_isAutoPassword) ...[
-                      const SizedBox(height: 16),
-                      _buildInput('Manual Password', 'Set a password', _passwordController, obscure: true),
-                    ],
                   ],
                 ],
               ),

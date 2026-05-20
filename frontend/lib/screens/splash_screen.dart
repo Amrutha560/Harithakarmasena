@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import '../services/api_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -31,13 +33,38 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     _controller.forward();
+    _checkLogin();
+  }
 
-    // Navigate to login after 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
+  void _checkLogin() async {
+    final apiService = ApiService();
+    if (kIsWeb && Uri.base.fragment.startsWith('/login')) {
+      await apiService.logout();
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/login');
+      return;
+    }
+
+    final token = await apiService.getToken();
+    final role = await apiService.getRole();
+
+    await Future.delayed(const Duration(seconds: 2));
+
+    if (!mounted) return;
+
+    if (token != null && role != null) {
+      if (role == 'resident') {
+        Navigator.pushReplacementNamed(context, '/resident');
+      } else if (role == 'admin') {
+        Navigator.pushReplacementNamed(context, '/admin');
+      } else if (role == 'staff') {
+        Navigator.pushReplacementNamed(context, '/staff');
+      } else {
         Navigator.pushReplacementNamed(context, '/login');
       }
-    });
+    } else {
+      Navigator.pushReplacementNamed(context, '/login');
+    }
   }
 
   @override

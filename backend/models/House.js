@@ -9,6 +9,9 @@ const houseSchema = new mongoose.Schema({
     ward: { type: mongoose.Schema.Types.ObjectId, ref: 'Ward' },
     wardNumber: { type: String },
     isActive: { type: Boolean, default: true },
+    wasteTypes: { type: [String], default: ['General'] },
+    collectionTime: { type: String, default: '09:00 AM - 11:00 AM' },
+    resident: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
 module.exports = mongoose.model('House', houseSchema);

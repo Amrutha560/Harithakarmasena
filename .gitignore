@@ -7,6 +7,41 @@
 .buildlog/
 .history
 
+# Local environment and generated files
+.env
+*.env
+!.env.example
+node_modules/
+uploads/
+scratch/
+flutter_temp/
+data/
+backend/backend_out.log
+backend/backend_err.log
+backend/uploads/
+backend/scratch/
+backend/node_modules/
+
+# Local database repair/debug helpers
+backend/assign_*.js
+backend/bulk_*.js
+backend/check_*.js
+backend/debug_*.js
+backend/deep_*.js
+backend/ensure_*.js
+backend/fix_*.js
+backend/global_*.js
+backend/migrate_*.js
+backend/raw_*.js
+backend/repair_*.js
+backend/reset_*.js
+backend/seed_*.js
+backend/sync_*.js
+backend/test_*.js
+
+# Local tunnel/downloaded binaries
+tools/*.exe
+
 
 
 # Flutter repo-specific

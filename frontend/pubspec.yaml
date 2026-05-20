@@ -38,6 +38,12 @@ dependencies:
   flutter_secure_storage: ^10.0.0
   shared_preferences: ^2.5.4
   fl_chart: ^0.70.2
+  intl: ^0.19.0
+  table_calendar: ^3.1.1
+  razorpay_flutter: ^1.4.4
+  image_picker: ^1.1.2
+  file_picker: ^11.0.2
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
